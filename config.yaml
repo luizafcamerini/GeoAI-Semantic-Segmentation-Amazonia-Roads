@@ -1,0 +1,211 @@
+# Configuração do estudo: classificação de terreno em séries temporais de baixa resolução
+# Todos os parâmetros do notebook vêm daqui. Edite MODO_RAPIDO (projeto.modo_rapido) para alternar.
+
+projeto:
+  ano: 2024                # último ano disponível no MapBiomas (Coleção 10, verificado em out/2026)
+  seed: 42
+  modo_rapido: true
+  user_agent: "classificacao-terreno-br/0.1 (estudo academico)"
+
+# Tamanho da AOI múltiplo de 960 m = mmc(10, 30, 64): as grades de 10, 30 e 64 m ficam aninhadas.
+modos:
+  rapido:
+    tamanho_aoi_m: 9600            # 9,6 x 9,6 km (recorte central)
+    max_datas: 12                  # datas por série (subamostra regular do ano)
+    aois: [amz_br163, cer_matopiba, mata_sp, amz_ro_holdout, eu_alentejo]
+    pixels_treino_por_aoi: 10000
+    folds_blocos: 3
+    bloco_m: 1920                  # lado do bloco espacial
+    buffer_m: 640                  # margem descartada entre treino e teste (>= 10 px a 64 m)
+    epocas: 6
+    n_arvores: 100
+    bootstrap_n: 200
+    usar_unet: false
+    usar_landsat: false
+    experimentos:                  # quais modelos rodam em cada experimento (limita o tempo)
+      blocos: [lgbm]
+      holdout: [rf, lgbm, tempcnn, ltae]
+      loro: [lgbm, ltae]
+      transferencia: [lgbm, ltae]
+  completo:
+    tamanho_aoi_m: 28800           # 28,8 x 28,8 km
+    max_datas: 23                  # todas as composições de 16 dias do ano
+    aois: [amz_br163, cer_matopiba, mata_sp, varzea_stm, amz_ro_holdout, eu_alentejo]
+    pixels_treino_por_aoi: 60000
+    folds_blocos: 5
+    bloco_m: 3840
+    buffer_m: 960
+    epocas: 30
+    n_arvores: 400
+    bootstrap_n: 1000
+    usar_unet: true
+    usar_landsat: true
+    experimentos:
+      blocos: [rf, lgbm, tempcnn, ltae]
+      holdout: [rf, lgbm, tempcnn, ltae]
+      loro: [rf, lgbm, tempcnn, ltae]
+      transferencia: [rf, lgbm, tempcnn, ltae]
+
+aois:
+  amz_br163:
+    nome: "Novo Progresso (PA), eixo da BR-163"
+    centro: [-55.38, -7.05]        # lon, lat
+    pais: BR
+    bioma: Amazônia
+    papel: treino
+    justificativa: >-
+      Arco do desmatamento ao longo da BR-163, com malha densa de estradas vicinais
+      e não oficiais em "espinha de peixe", pastagens e floresta remanescente.
+  cer_matopiba:
+    nome: "Luís Eduardo Magalhães (BA), MATOPIBA"
+    centro: [-45.80, -12.10]
+    pais: BR
+    bioma: Cerrado
+    papel: treino
+    justificativa: >-
+      Fronteira agrícola do MATOPIBA, com estradas rurais retilíneas entre talhões e pivôs,
+      cerrado nativo e área urbana em expansão.
+  mata_sp:
+    nome: "Jundiaí–Atibaia (SP), periurbano"
+    centro: [-46.85, -23.15]
+    pais: BR
+    bioma: Mata Atlântica
+    papel: treino
+    justificativa: >-
+      Mosaico periurbano com construções densas, rodovias (Anhanguera/Bandeirantes/D. Pedro),
+      remanescentes de Mata Atlântica e represas.
+  varzea_stm:
+    nome: "Santarém (PA), várzea do Amazonas"
+    centro: [-54.75, -2.45]
+    pais: BR
+    bioma: Amazônia (várzea)
+    papel: treino
+    justificativa: >-
+      Água sazonal (cheia/vazante), floresta alagável, cidade e o extremo norte da BR-163.
+  amz_ro_holdout:
+    nome: "Machadinho d'Oeste (RO)"
+    centro: [-62.00, -9.40]
+    pais: BR
+    bioma: Amazônia
+    papel: holdout
+    justificativa: >-
+      Assentamentos do INCRA em espinha de peixe, região diferente das de treino.
+      Nunca usada no treino: serve como teste geográfico final.
+  eu_alentejo:
+    nome: "Évora (Portugal), Alentejo"
+    centro: [-7.90, 38.57]
+    pais: PT
+    bioma: Mediterrâneo (montado)
+    papel: transferencia
+    justificativa: >-
+      Região europeia com OSM bem mapeado e ESA WorldCover, usada só para treinar o modelo
+      do experimento de transferência Europa → Brasil.
+
+fontes:
+  bdc_stac: "https://data.inpe.br/bdc/stac/v1/"
+  pc_stac: "https://planetarycomputer.microsoft.com/api/stac/v1"
+  # Padrões para escolher coleções em tempo de execução (id ou título, sem nome fixo)
+  padroes_colecao:
+    s2_cubo: {incluir: ["sentinel-2", "data cube", "16 days"], excluir: []}
+    cbers_wfi_cubo: {incluir: ["wfi", "data cube", "8 days"], excluir: []}
+    landsat_cubo: {incluir: ["landsat", "data cube", "16 days"], excluir: []}
+  mapbiomas_bucket: "mapbiomas-public"
+  mapbiomas_prefixo: "initiatives/brasil/"
+  mapbiomas_pontos_validacao: "https://brasil.mapbiomas.org/wp-content/uploads/sites/3/2026/10/mapbiomas_85k_points_validation.zip"
+  overpass: "https://overpass-api.de/api/interpreter"
+  overpass_espelhos: ["https://lz4.overpass-api.de/api/interpreter", "https://z.overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter"]
+  bc250_indice: "https://geoftp.ibge.gov.br/cartas_e_mapas/bases_cartograficas_continuas/bc250/"
+  dnit_snv_wfs: "https://servicos.dnit.gov.br/dnitgeo/geoserver/wfs"
+  imazon_estradas: null            # nenhum link público encontrado (ver notebook)
+  ms_buildings_links: "https://minedbuildings.z5.web.core.windows.net/global-buildings/dataset-links.csv"
+  timeout_s: 60
+
+classes:
+  nomes: [outros, agua, vegetacao_baixa, floresta, construcoes, estrada]
+  ignorar: 255
+
+# Mapeamento explícito MapBiomas (legenda da Coleção 10) -> classes do estudo
+mapbiomas_para_estudo:
+  3: floresta            # Formação Florestal
+  5: floresta            # Mangue
+  6: floresta            # Floresta Alagável
+  49: floresta           # Restinga Arbórea
+  4: vegetacao_baixa     # Formação Savânica
+  11: vegetacao_baixa    # Campo Alagado e Área Pantanosa
+  12: vegetacao_baixa    # Formação Campestre
+  13: vegetacao_baixa    # Outras Formações não Florestais
+  50: vegetacao_baixa    # Restinga Herbácea
+  15: vegetacao_baixa    # Pastagem
+  24: construcoes        # Área Urbanizada
+  33: agua               # Rio, Lago e Oceano
+  31: agua               # Aquicultura
+  9: outros              # Silvicultura (árvores plantadas; mantida fora de "floresta")
+  21: outros             # Mosaico de Usos
+  18: outros             # Agricultura
+  19: outros             # Lavoura Temporária
+  39: outros             # Soja
+  20: outros             # Cana
+  40: outros             # Arroz
+  62: outros             # Algodão
+  41: outros             # Outras Lavouras Temporárias
+  36: outros             # Lavoura Perene
+  46: outros             # Café
+  47: outros             # Citrus
+  35: outros             # Dendê
+  48: outros             # Outras Lavouras Perenes
+  23: outros             # Praia, Duna e Areal
+  25: outros             # Outras Áreas não Vegetadas
+  29: outros             # Afloramento Rochoso
+  30: outros             # Mineração
+  32: outros             # Apicum
+  75: outros             # Usina Fotovoltaica
+  27: ignorar            # Não observado
+  0: ignorar             # Sem dado
+
+# ESA WorldCover -> classes do estudo (rótulo da AOI europeia e checagem cruzada no Brasil)
+worldcover_para_estudo:
+  10: floresta
+  20: vegetacao_baixa
+  30: vegetacao_baixa
+  40: outros
+  50: construcoes
+  60: outros
+  70: outros
+  80: agua
+  90: vegetacao_baixa
+  95: floresta
+  100: vegetacao_baixa
+  0: ignorar
+
+estradas:
+  # largura total (m) do buffer por tipo de via OSM; outros tipos usam "padrao"
+  largura_m:
+    motorway: 20
+    trunk: 16
+    primary: 14
+    secondary: 12
+    tertiary: 10
+    padrao: 6
+  largura_oficial_m: 14            # BC250 / DNIT (rodovias oficiais)
+  tipos_excluidos: [footway, path, cycleway, steps, pedestrian, bridleway, corridor, construction, proposed, elevator, platform, raceway, abandoned, razed]
+  subgrade_m: 2                    # resolução da sub-grade para a fração de cobertura
+  # Limiar dependente da resolução: pixel = estrada se fração >= fator * largura_ref / res.
+  # Com fator 0,5 e largura 6 m: 0,30 (10 m), 0,10 (30 m), 0,047 (64 m), ou seja, metade da
+  # cobertura esperada de uma vicinal de 6 m atravessando o pixel. Um limiar fixo (ex.: 0,15)
+  # apagaria todas as vicinais a 64 m (6/64 ≈ 0,09), confundindo "rótulo" com "sensor".
+  fator_limiar: 0.5
+  largura_referencia_m: 6
+  fatores_sensibilidade: [0.25, 0.5, 0.75, 1.0, 1.5, 2.0]
+  tolerancia_relaxada_px: [1, 2]
+
+validacao_ouro:
+  pontos_por_classe_aoi_rapido: 50
+  pontos_por_classe_aoi_completo: 100
+  arquivo_csv: validacao/pontos_para_interpretacao.csv
+  arquivo_gpkg: validacao/pontos_para_interpretacao.gpkg
+
+modelos:
+  focal_gamma: 2.0
+  lr: 0.002
+  batch: 512
+  lgbm_folhas: 31

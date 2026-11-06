@@ -1,0 +1,6 @@
+data/
+.venv/
+resultados/splits/
+__pycache__/
+.ipynb_checkpoints/
+*.part
