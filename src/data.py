@@ -351,39 +351,132 @@ def degrade_cube(cube: dict, src_grid: Grid, dst_res: int, min_valid_frac: float
 
 
 # --------------------------------------------------------------------------------------
-# MapBiomas (latest collection discovered from the public bucket)
+# MapBiomas via Google Earth Engine
+# (the public GeoTIFF download was suspended by MapBiomas in 2026; GEE assets are the official route)
 # --------------------------------------------------------------------------------------
-def mapbiomas_latest(cfg: dict, year: int) -> tuple[str, int, str]:
-    """Return (collection_name, year_used, https_url) discovered by listing the public bucket."""
-    bucket, prefix = cfg["fontes"]["mapbiomas_bucket"], cfg["fontes"]["mapbiomas_prefixo"]
-    api = f"https://storage.googleapis.com/storage/v1/b/{bucket}/o"
-    r = http_get(api, cfg, params={"prefix": prefix + "collection_", "delimiter": "/", "fields": "prefixes"})
-    cols = [p.rstrip("/").split("/")[-1] for p in r.json().get("prefixes", [])]
-    cols.sort(key=lambda c: int("".join(ch for ch in c.split("_")[-1] if ch.isdigit()) or 0), reverse=True)
-    for col in cols:
-        r = http_get(api, cfg, params={"prefix": f"{prefix}{col}/lulc/coverage/brazil_coverage_", "fields": "items(name)"})
-        names = [i["name"] for i in r.json().get("items", [])]
-        years = sorted(int(n[-8:-4]) for n in names if n.endswith(".tif") and n[-8:-4].isdigit())
-        if years:
-            y = year if year in years else max(y for y in years if y <= year) if min(years) <= year else years[-1]
-            url = f"https://storage.googleapis.com/{bucket}/{prefix}{col}/lulc/coverage/brazil_coverage_{y}.tif"
-            choices = load_json(CHOICES_FILE, {})
-            choices["mapbiomas"] = {"colecao": col, "ano": y, "url": url, "colecoes_no_bucket": cols}
-            save_json(choices, CHOICES_FILE)
-            return col, y, url
-    raise RuntimeError("nenhuma coleção MapBiomas com GeoTIFF no bucket")
+_EE = None
+
+
+def ee_init(cfg: dict):
+    """Initialize Earth Engine once. Needs `earthengine authenticate` and a Cloud project ID."""
+    global _EE
+    if _EE is not None:
+        return _EE
+    import os
+
+    import ee
+
+    project = os.environ.get("EE_PROJECT") or cfg["fontes"].get("gee_projeto")
+    if not project:
+        raise RuntimeError("Earth Engine sem projeto: preencha fontes.gee_projeto no config.yaml "
+                           "(ou defina a variável de ambiente EE_PROJECT) com o ID do seu projeto Google Cloud.")
+    try:
+        ee.Initialize(project=project)
+    except Exception as e:  # noqa: BLE001
+        msg = str(e)
+        if "authorize" in msg.lower() or "credentials" in msg.lower():
+            dica = "Rode uma vez no terminal: .venv/Scripts/earthengine authenticate"
+        elif "not registered" in msg:
+            dica = (f"Registre o projeto {project} no Earth Engine (uso não comercial): "
+                    f"https://console.cloud.google.com/earth-engine/configuration?project={project}")
+        elif "has not been used in project" in msg or "is disabled" in msg:
+            dica = (f"Ative a Earth Engine API no projeto {project} e registre-o no Earth Engine "
+                    "(code.earthengine.google.com/register), depois tente de novo.")
+        else:
+            dica = "Confira se o projeto está registrado no Earth Engine e se a sua conta tem acesso a ele."
+        raise RuntimeError(f"Earth Engine não inicializou ({msg}). {dica}") from e
+    _EE = ee
+    return ee
+
+
+def _list_ee_images(ee, parent: str, depth: int = 3) -> list[str]:
+    """Image asset ids under `parent`, descending into folders and image collections."""
+    out = []
+    try:
+        assets = ee.data.listAssets({"parent": parent}).get("assets", [])
+    except Exception:  # noqa: BLE001
+        return out
+    for a in assets:
+        t, name = a.get("type"), a.get("id") or a["name"].split("/assets/", 1)[-1]
+        if t == "IMAGE":
+            out.append(name)
+        elif t in ("FOLDER", "IMAGE_COLLECTION") and depth > 0:
+            out += _list_ee_images(ee, name, depth - 1)
+    return out
+
+
+def _collection_key(asset_id: str) -> tuple[int, int, int]:
+    """Sort key (major, minor, version) from ids like .../collection10/..._integration_v2 or .../collection10_1/..."""
+    import re
+
+    folders = asset_id.rsplit("/", 1)[0]
+    m = re.findall(r"collection_?(\d+)(?:[_.](\d+))?", folders) or re.findall(r"collection_?(\d+)", asset_id)
+    major, minor = (m[-1] if isinstance(m[-1], tuple) else (m[-1], "0")) if m else ("0", "0")
+    v = re.search(r"_v(\d+)$", asset_id)
+    return int(major), int(minor or 0), int(v.group(1)) if v else 0
+
+
+def mapbiomas_gee_image(cfg: dict, year: int):
+    """(ee.Image band, asset_id, year_used) for the latest MapBiomas LULC integration asset on GEE."""
+    import re
+
+    ee = ee_init(cfg)
+    forced = cfg["fontes"].get("mapbiomas_gee_asset")
+    if forced:
+        cands = [forced]
+    else:
+        root = cfg["fontes"]["mapbiomas_gee_raiz"]
+        # LULC map: "..._integration_vN" up to collection 10, "..._coverage_vN" from 10 on (excludes fire/water/etc.)
+        lulc = re.compile(r"mapbiomas(_brazil)?_collection\d+(_\d+)?_(integration|coverage)_v\d+")
+        cands = [a for a in _list_ee_images(ee, root) if lulc.fullmatch(a.rsplit("/", 1)[-1])]
+        cands.sort(key=_collection_key, reverse=True)
+        if not cands:
+            raise RuntimeError(f"nenhum asset MapBiomas de cobertura encontrado em {root}; "
+                               "defina fontes.mapbiomas_gee_asset no config.yaml")
+    for asset in cands:
+        img = ee.Image(asset)
+        years = sorted(int(b.split("_")[-1]) for b in img.bandNames().getInfo() if re.fullmatch(r"classification_\d{4}", b))
+        if not years:
+            continue
+        y = year if year in years else max([v for v in years if v <= year] or [years[-1]])
+        choices = load_json(CHOICES_FILE, {})
+        choices["mapbiomas"] = {"fonte": "Google Earth Engine", "asset": asset, "ano": y, "candidatos": cands[:10]}
+        save_json(choices, CHOICES_FILE)
+        return img.select(f"classification_{y}"), asset, y
+    raise RuntimeError(f"nenhuma banda classification_AAAA nos assets: {cands[:5]}")
+
+
+def read_gee_to_grid(ee, image, grid: Grid, mode: bool = False) -> np.ndarray:
+    """Pixels of a single-band ee.Image on exactly `grid` (computePixels; nearest, or mode when coarsening)."""
+    crs = f"EPSG:{grid.crs.to_epsg()}"
+    a, b, c, d, e, f = list(grid.transform)[:6]
+    image = image.unmask(0).toUint8()
+    if mode:
+        image = image.reduceResolution(ee.Reducer.mode(), maxPixels=1024).reproject(crs=crs, crsTransform=[a, b, c, d, e, f])
+    H, W = grid.shape
+    arr = ee.data.computePixels({
+        "expression": image,
+        "fileFormat": "NUMPY_NDARRAY",
+        "grid": {"dimensions": {"width": W, "height": H}, "crsCode": crs,
+                 "affineTransform": {"scaleX": a, "shearX": b, "translateX": c, "shearY": d, "scaleY": e, "translateY": f}},
+    })
+    return np.asarray(arr[arr.dtype.names[0]] if arr.dtype.names else arr, dtype=np.uint8)
 
 
 def load_mapbiomas(cfg: dict, aoi: str, grid: Grid) -> np.ndarray:
     path = DATA / "rotulos" / f"{aoi}__mapbiomas_{grid.res}.npy"
     if path.exists():
         return np.load(path)
-    col, y, url = mapbiomas_latest(cfg, cfg["projeto"]["ano"])
-    rs = Resampling.nearest if grid.res <= 30 else Resampling.mode
-    arr = _retry(lambda: read_to_grid(url, grid, rs, dtype="uint8", src_nodata=0))
+    try:
+        img, asset, y = mapbiomas_gee_image(cfg, cfg["projeto"]["ano"])
+        ee = ee_init(cfg)
+        arr = _retry(lambda: read_gee_to_grid(ee, img, grid, mode=grid.res > 30))
+    except Exception as e:  # noqa: BLE001
+        log_status("MapBiomas", False, f"{type(e).__name__}: {e}")
+        raise
     path.parent.mkdir(parents=True, exist_ok=True)
     np.save(path, arr)
-    log_status("MapBiomas", True, f"{col}, ano {y}")
+    log_status("MapBiomas", True, f"GEE {asset}, ano {y}")
     return arr
 
 

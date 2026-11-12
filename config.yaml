@@ -109,8 +109,11 @@ fontes:
     s2_cubo: {incluir: ["sentinel-2", "data cube", "16 days"], excluir: []}
     cbers_wfi_cubo: {incluir: ["wfi", "data cube", "8 days"], excluir: []}
     landsat_cubo: {incluir: ["landsat", "data cube", "16 days"], excluir: []}
-  mapbiomas_bucket: "mapbiomas-public"
-  mapbiomas_prefixo: "initiatives/brasil/"
+  # MapBiomas: o download direto de GeoTIFF foi suspenso pelo MapBiomas (nov/2026); a leitura é via Google Earth Engine.
+  # Requer: `.venv/Scripts/earthengine authenticate` uma vez e o ID de um projeto Google Cloud registrado no Earth Engine.
+  gee_projeto: geoai-514519        # ID do projeto Google Cloud (ou variável de ambiente EE_PROJECT)
+  mapbiomas_gee_raiz: "projects/mapbiomas-public/assets/brazil/lulc"
+  mapbiomas_gee_asset: null        # força um asset específico; null = usa a coleção mais recente encontrada na raiz
   mapbiomas_pontos_validacao: "https://brasil.mapbiomas.org/wp-content/uploads/sites/3/2026/10/mapbiomas_85k_points_validation.zip"
   overpass: "https://overpass-api.de/api/interpreter"
   overpass_espelhos: ["https://lz4.overpass-api.de/api/interpreter", "https://z.overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter"]

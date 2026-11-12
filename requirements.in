@@ -10,6 +10,7 @@ pyproj
 pyogrio
 pyarrow
 requests
+earthengine-api
 pyyaml
 tqdm
 pystac-client

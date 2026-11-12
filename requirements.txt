@@ -48,7 +48,9 @@ certifi==2026.10.23
     #   rasterio
     #   requests
 cffi==2.1.1
-    # via argon2-cffi-bindings
+    # via
+    #   argon2-cffi-bindings
+    #   cryptography
 charset-normalizer==3.5.2
     # via requests
 click==8.5.0
@@ -71,6 +73,8 @@ comm==0.2.3
     #   ipywidgets
 contourpy==1.4.0
     # via matplotlib
+cryptography==50.0.2
+    # via google-auth
 cycler==0.12.1
     # via matplotlib
 dask==2026.8.0
@@ -81,6 +85,8 @@ debugpy==1.8.22
     # via ipykernel
 defusedxml==0.7.1
     # via nbconvert
+earthengine-api==1.7.52
+    # via -r requirements.in
 executing==2.3.0
     # via stack-data
 fastjsonschema==2.22.2
@@ -101,10 +107,46 @@ geopandas==1.2.0
     # via
     #   -r requirements.in
     #   osmnx
+google-api-core==2.44.0
+    # via
+    #   google-api-python-client
+    #   google-cloud-core
+    #   google-cloud-storage
+google-api-python-client==2.202.0
+    # via earthengine-api
+google-auth==2.62.2
+    # via
+    #   earthengine-api
+    #   google-api-core
+    #   google-api-python-client
+    #   google-auth-httplib2
+    #   google-cloud-core
+    #   google-cloud-storage
+google-auth-httplib2==0.4.4
+    # via
+    #   earthengine-api
+    #   google-api-python-client
+google-cloud-core==2.8.0
+    # via google-cloud-storage
+google-cloud-storage==3.17.1
+    # via earthengine-api
+google-crc32c==1.9.0
+    # via
+    #   google-cloud-storage
+    #   google-resumable-media
+google-resumable-media==2.11.0
+    # via google-cloud-storage
+googleapis-common-protos==1.76.0
+    # via google-api-core
 h11==0.16.0
     # via httpcore
 httpcore==1.0.9
     # via httpx
+httplib2==0.32.1
+    # via
+    #   earthengine-api
+    #   google-api-python-client
+    #   google-auth-httplib2
 httpx==0.28.1
     # via jupyterlab
 idna==3.20
@@ -293,6 +335,8 @@ odc-loader==0.6.5
     # via odc-stac
 odc-stac==0.5.3
     # via -r requirements.in
+opentelemetry-api==1.45.2
+    # via google-api-core
 osmnx==2.1.1
     # via -r requirements.in
 packaging==26.3
@@ -343,12 +387,23 @@ prompt-toolkit==3.0.53
     # via
     #   ipython
     #   jupyter-console
+proto-plus==1.29.0
+    # via google-api-core
+protobuf==7.36.2
+    # via
+    #   google-api-core
+    #   googleapis-common-protos
+    #   proto-plus
 psutil==7.2.2
     # via ipython
 pure-eval==0.2.4
     # via stack-data
 pyarrow==26.0.0
     # via -r requirements.in
+pyasn1==0.6.5
+    # via pyasn1-modules
+pyasn1-modules==0.4.2
+    # via google-auth
 pycparser==3.12
     # via cffi
 pydantic==2.14.2
@@ -368,6 +423,7 @@ pyogrio==0.13.0
     #   geopandas
 pyparsing==3.3.3
     # via
+    #   httplib2
     #   matplotlib
     #   rasterio
 pyproj==3.8.0
@@ -509,7 +565,10 @@ referencing==0.37.0
 requests==2.34.2
     # via
     #   -r requirements.in
+    #   earthengine-api
     #   folium
+    #   google-api-core
+    #   google-cloud-storage
     #   jupyterlab-server
     #   osmnx
     #   planetary-computer
@@ -610,6 +669,7 @@ typing-extensions==4.16.0
     #   jupyter-client
     #   odc-loader
     #   odc-stac
+    #   opentelemetry-api
     #   pydantic
     #   pydantic-core
     #   referencing
@@ -624,6 +684,8 @@ tzdata==2026.6
     #   python-dateutil
 uri-template==1.3.0
     # via jsonschema
+uritemplate==4.2.0
+    # via google-api-python-client
 urllib3==2.8.0
     # via requests
 wcwidth==0.9.4
